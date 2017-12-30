@@ -227,7 +227,15 @@ LeapTrainer.Controller = Class.extend({
 	 	 * 
 	 	 */
 	 	this.onFrame = function(frame) {		
-			
+			var hand;
+			if(hand = frame.hands[0]) {
+				// 0 left-right 1 up-down 2 front-back
+				let pos = hand.screenPosition();
+				$('#hand').css({
+					left: pos[0] + 'px',
+					top: (pos[1] + window.innerHeight * 0.5) + 'px'
+				});
+			}
 	 		/*
 	 		 * The pause() and resume() methods can be used to temporarily disable frame monitoring.
 	 		 */
