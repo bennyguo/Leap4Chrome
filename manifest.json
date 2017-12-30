@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "My Cool Extension",
+  "version": "0.1",
+  "content_scripts": [
+	  {
+	    "matches": [
+	      "<all_urls>"
+	    ],
+	    "js": ["jquery.js", "leap-0.6.4.js", "leaptrainer.js", "leap-plugins-0.1.12.js", "neural-networks.js", "brain.js", "content.js"]
+	  }
+  ],
+  "browser_action": {
+  	"default_icon": "icon.png"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "permissions": [
+    "tabs",
+    "http://*/",
+    "https://*/"
+  ]
+}
