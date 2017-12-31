@@ -10,16 +10,19 @@ chrome.runtime.onMessage.addListener(
 		switch(request.message) {
 			case "open_new_tab":
 				chrome.tabs.create({"url": request.url});
+				break;
 			case "close_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
 					chrome.tabs.remove(activeTab.id);
 				});
+				break;
 			case "reload_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
 					chrome.tabs.reload(activeTab.id);
 				});
+				break;
 			case "zoom_in_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
@@ -29,6 +32,7 @@ chrome.runtime.onMessage.addListener(
 							chrome.tabs.setZoom(activeTab.id, new_zoom);
 					});
 				});
+				break;
 			case "zoom_out_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
@@ -38,6 +42,7 @@ chrome.runtime.onMessage.addListener(
 							chrome.tabs.setZoom(activeTab.id, new_zoom);
 					});
 				});
+				break;
 			case "go_back_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
@@ -45,6 +50,7 @@ chrome.runtime.onMessage.addListener(
 						code: 'history.back()'
 					});
 				});
+				break;
 			case "go_forward_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
@@ -52,6 +58,7 @@ chrome.runtime.onMessage.addListener(
 						code: 'history.forward()'
 					});
 				});
+				break;
 			case "scroll_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
@@ -60,6 +67,7 @@ chrome.runtime.onMessage.addListener(
 						code: 'window.scrollBy(0, 100)'
 					});
 				});
+				break;
 		}
 	}
 );

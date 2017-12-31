@@ -39,20 +39,20 @@ leapController.use('screenPosition', {});
 var trainer = new LeapTrainer.ANNController();
 trainer.fromJSON(swipe_left);
 trainer.fromJSON(swipe_right);
-trainer.fromJSON(close);
+// trainer.fromJSON(close);
 trainer.fromJSON(shit);
-// trainer.on('sl', function() { 
-// 	console.log('swipe-left');
-// 	chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
-// });
-// trainer.on('sr', function() { 
-// 	console.log('swipe-right');
-// 	chrome.runtime.sendMessage({"message": "go_back_current_tab"});
-// });
+trainer.on('sl', function() { 
+	console.log('swipe-left');
+	chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
+});
+trainer.on('sr', function() { 
+	console.log('swipe-right');
+	chrome.runtime.sendMessage({"message": "go_back_current_tab"});
+});
 // trainer.on('close', function() { 
 // 	console.log('close');
 // 	// chrome.runtime.sendMessage({"message": "close_current_tab"});
 // });
 trainer.on('shit', function() {
-	console.log('shit');
+	chrome.runtime.sendMessage({"message": "open_new_tab", "url": trainer.currentPointingHref});
 });

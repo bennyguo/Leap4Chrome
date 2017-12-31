@@ -160,6 +160,7 @@ LeapTrainer.Controller = Class.extend({
 
 	renderableGesture		: null, // Implementations that record a gestures for graphical rendering should store the data for the last detected gesture in this array.
 	
+	currentPointingHref		: null, // New feature!
 	/**
 	 * The controller initialization function - this is called just after a new instance of the controller is created to parse the options array, 
 	 * connect to the Leap Motion device (unless an existing Leap.Controller object was passed as a parameter), and register a frame listener with 
@@ -226,14 +227,30 @@ LeapTrainer.Controller = Class.extend({
 	 	/**
 	 	 * 
 	 	 */
+
+	 	var _this = this;
 	 	this.onFrame = function(frame) {		
 			var hand;
 			if(hand = frame.hands[0]) {
 				// 0 left-right 1 up-down 2 front-back
 				let pos = hand.screenPosition();
+				let pos_x = pos[0], pos_y = pos[1] + window.innerHeight * 0.5
 				$('#hand').css({
-					left: pos[0] + 'px',
-					top: (pos[1] + window.innerHeight * 0.5) + 'px'
+					left: pos_x + 'px',
+					top: (pos_y + $(window).scrollTop()) + 'px'
+				});
+
+				$('a').each(function() {
+					let href_pos = this.getBoundingClientRect();
+					if(pos_x > href_pos.x && pos_x < href_pos.x + href_pos.width &&
+					   pos_y > href_pos.y && pos_y < href_pos.y + href_pos.height) {
+						$(this).css({
+							'color': 'green'
+						});
+						if(this.href) {
+							_this.currentPointingHref = this.href;
+						}
+					}
 				});
 			}
 	 		/*
