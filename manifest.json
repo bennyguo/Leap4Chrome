@@ -7,7 +7,8 @@
 	    "matches": [
 	      "<all_urls>"
 	    ],
-	    "js": ["jquery.js", "leap-0.6.4.js", "leaptrainer.js", "leap-plugins-0.1.12.js", "neural-networks.js", "brain.js", "content.js"]
+	    "js": ["jquery.js", "leap-0.6.4.js", "leaptrainer.js", "leap-plugins-0.1.12.js", 
+        "neural-networks.js", "brain.js", "cross-correlation.js", "content.js"]
 	  }
   ],
   "browser_action": {

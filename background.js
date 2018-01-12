@@ -9,7 +9,8 @@ chrome.runtime.onMessage.addListener(
 	function(request, sender, sendResponse) {
 		switch(request.message) {
 			case "open_new_tab":
-				chrome.tabs.create({"url": request.url});
+				if(request.url)
+					chrome.tabs.create({"url": request.url});
 				break;
 			case "close_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -59,12 +60,21 @@ chrome.runtime.onMessage.addListener(
 					});
 				});
 				break;
-			case "scroll_current_tab":
+			case "scroll_up_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
 					// use window.scrollBy(dx, dy);
 					chrome.tabs.executeScript(activeTab.id, {
-						code: 'window.scrollBy(0, 100)'
+						code: 'window.scrollBy(0, -10)'
+					});
+				});
+				break;
+			case "scroll_down_current_tab":
+				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+					let activeTab = tabs[0];
+					// use window.scrollBy(dx, dy);
+					chrome.tabs.executeScript(activeTab.id, {
+						code: 'window.scrollBy(0, 10)'
 					});
 				});
 				break;

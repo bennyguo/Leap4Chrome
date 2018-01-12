@@ -40,6 +40,15 @@
  */
 var LeapTrainer = {};
 
+// positions
+const CENTER = 0
+const UPPER_LEFT = 1;
+const UPPER_RIGHT = 2;
+const LOWER_LEFT = 3;
+const LOWER_RIGHT = 4;
+const UP = 5;
+const DOWN = 6;
+
 /**
  * Create the basic class structure.
  * 
@@ -161,6 +170,8 @@ LeapTrainer.Controller = Class.extend({
 	renderableGesture		: null, // Implementations that record a gestures for graphical rendering should store the data for the last detected gesture in this array.
 	
 	currentPointingHref		: null, // New feature!
+
+	currentHandArea			: CENTER, // New feature!
 	/**
 	 * The controller initialization function - this is called just after a new instance of the controller is created to parse the options array, 
 	 * connect to the Leap Motion device (unless an existing Leap.Controller object was passed as a parameter), and register a frame listener with 
@@ -234,9 +245,53 @@ LeapTrainer.Controller = Class.extend({
 			if(hand = frame.hands[0]) {
 				// 0 left-right 1 up-down 2 front-back
 				let pos = hand.screenPosition();
-				let pos_x = pos[0], pos_y = pos[1] + window.innerHeight * 0.5
+				let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
+				let pos_y = pos[1] * 2.5 + window.innerHeight;
+				let area = CENTER;
+				if(pos_x < window.innerWidth * 0.2 && pos_y < 0) {
+					area = UPPER_LEFT;
+				} else if(pos_x > window.innerWidth * 0.8 && pos_y < 0) {
+					area = UPPER_RIGHT;
+				} else if(pos_x < window.innerWidth * 0.2 && pos_y > window.innerHeight) {
+					area = LOWER_LEFT;
+				} else if(pos_x > window.innerWidth * 0.8 && pos_y > window.innerHeight) {
+					area = LOWER_RIGHT;
+				} else if(pos_x > window.innerWidth * 0.3 && pos_x < window.innerWidth * 0.7) {
+					if(pos_y < 0) {
+						area = UP;
+						chrome.runtime.sendMessage({"message": "scroll_up_current_tab"});
+					}
+					else if(pos_y > window.innerHeight) {
+						area = DOWN;
+						chrome.runtime.sendMessage({"message": "scroll_down_current_tab"});
+					}
+				}
+
+				if(area != this.currentHandArea) {
+					this.currentHandArea = area;
+					console.log(area);
+					if(area == UPPER_LEFT) {
+						$('#hint').html('向后');
+					} else if(area == UPPER_RIGHT) {
+						$('#hint').html('向前');
+					} else if(area == LOWER_LEFT) {
+						$('#hint').html('某个功能');
+					} else if(area == LOWER_RIGHT) {
+						$('#hint').html('关闭标签页');
+					}
+					if(area != CENTER && area != UP && area != DOWN) {
+						$('#hint').animate({
+							'opacity': '1'
+						}, 'slow');
+					} else {
+						$('#hint').animate({
+							'opacity': '0'
+						}, 'slow');
+					}
+				}
+
 				$('#hand').css({
-					left: pos_x + 'px',
+					left: (pos_x + $(window).scrollLeft()) + 'px',
 					top: (pos_y + $(window).scrollTop()) + 'px'
 				});
 
@@ -249,6 +304,8 @@ LeapTrainer.Controller = Class.extend({
 						});
 						if(this.href) {
 							_this.currentPointingHref = this.href;
+						} else {
+							_this.currentPointingHref = null;
 						}
 					}
 				});
