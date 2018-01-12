@@ -240,11 +240,42 @@ LeapTrainer.Controller = Class.extend({
 	 	 */
 
 	 	var _this = this;
-	 	this.onFrame = function(frame) {		
+	 	this.onFrame = function(frame) {	
+	 		function clickableElementsFromPoint(x, y) {
+	 		    var element, elementList = [];
+	 		    var old_visibility = [];
+	 		    var foundElement;
+	 		    while (true) {
+	 		    	// get element under point x, y
+	 		        element = document.elementFromPoint(x, y);
+	 		        if (!element || element === document.documentElement) {
+	 		        	foundElement = false;
+	 		            break;
+	 		        }
+	 		        elementList.push(element);
+	 		        old_visibility.push(element.style.visibility);
+	 		        element.style.visibility = 'hidden'; // Temporarily hide the element (without changing the layout)
+
+	 		        if('click' in element && element.id != 'hand') {
+	 		        	foundElement = true;
+	 		        	break;
+	 		        }
+	 		    }
+	 		    for (var k = 0; k < elementList.length; k++) {
+	 		        elementList[k].style.visibility = old_visibility[k];
+	 		    }
+	 		    if(foundElement) {
+	 		    	return elementList.pop();
+	 		    } else {
+	 		    	return null;
+	 		    }
+	 		}
+
 			var hand;
 			if(hand = frame.hands[0]) {
 				// 0 left-right 1 up-down 2 front-back
 				let pos = hand.screenPosition();
+				// console.log(pos[0], pos[1]);
 				let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
 				let pos_y = pos[1] * 2.5 + window.innerHeight;
 				let area = CENTER;
@@ -295,20 +326,26 @@ LeapTrainer.Controller = Class.extend({
 					top: (pos_y + $(window).scrollTop()) + 'px'
 				});
 
-				$('a').each(function() {
-					let href_pos = this.getBoundingClientRect();
-					if(pos_x > href_pos.x && pos_x < href_pos.x + href_pos.width &&
-					   pos_y > href_pos.y && pos_y < href_pos.y + href_pos.height) {
-						$(this).css({
-							'color': 'green'
-						});
-						if(this.href) {
-							_this.currentPointingHref = this.href;
-						} else {
-							_this.currentPointingHref = null;
-						}
-					}
-				});
+				let ele = clickableElementsFromPoint(pos_x, pos_y);
+				if(ele) {
+					// console.log(ele);
+					_this.currentPointingHref = ele;
+				}
+
+				// _this.currentPointingHref = null;
+				// $('a').each(function() {
+				// 	let href_pos = this.getBoundingClientRect();
+				// 	if(pos_x > href_pos.x && pos_x < href_pos.x + href_pos.width &&
+				// 	   pos_y > href_pos.y && pos_y < href_pos.y + href_pos.height) {
+				// 		$(this).css({
+				// 			'color': 'green'
+				// 		});
+				// 		if(this.href) {
+				// 			// _this.currentPointingHref = this.href;
+				// 			_this.currentPointingHref = this;
+				// 		}
+				// 	}
+				// });
 			}
 	 		/*
 	 		 * The pause() and resume() methods can be used to temporarily disable frame monitoring.
