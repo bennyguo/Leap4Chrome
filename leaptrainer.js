@@ -39,6 +39,8 @@
  * Create the LeapTrainer namespace.
  */
 var LeapTrainer = {};
+var leapdebug = null;
+var debugoutput = false;
 
 // positions
 const CENTER = 0
@@ -216,9 +218,9 @@ LeapTrainer.Controller = Class.extend({
 	onFrame: function () {},
 	
 	/**
- 	 * This function binds a listener to the Leap.Controller frame event in order to monitor activity coming from the device.
- 	 * 
- 	 * This bound frame listener function fires the 'gesture-detected', 'started-recording', and 'stopped-recording' events.
+	 * This function binds a listener to the Leap.Controller frame event in order to monitor activity coming from the device.
+	 * 
+	 * This bound frame listener function fires the 'gesture-detected', 'started-recording', and 'stopped-recording' events.
 	 * 
 	 */
 	bindFrameListener: function () {
@@ -232,44 +234,53 @@ LeapTrainer.Controller = Class.extend({
 		 * These two utility functions are used to push a vector (a 3-variable array of numbers) into the gesture array - which is the 
 		 * array used to store activity in a gesture during recording. NaNs are replaced with 0.0, though they shouldn't occur!
 		 */
-	 	recordValue		 = function (val) 	{ gesture.push(isNaN(val) ? 0.0 : val); },
-	 	recordVector	 = function (v) 	{ recordValue(v[0]); recordValue(v[1]); recordValue(v[2]); };
+		recordValue		 = function (val) 	{ gesture.push(isNaN(val) ? 0.0 : val); },
+		recordVector	 = function (v) 	{ recordValue(v[0]); recordValue(v[1]); recordValue(v[2]); };
 
-	 	/**
-	 	 * 
-	 	 */
+		/**
+		 * 
+		 */
 
-	 	var _this = this;
-	 	this.onFrame = function(frame) {	
-	 		function clickableElementsFromPoint(x, y) {
-	 		    var element, elementList = [];
-	 		    var old_visibility = [];
-	 		    var foundElement;
-	 		    while (true) {
-	 		    	// get element under point x, y
-	 		        element = document.elementFromPoint(x, y);
-	 		        if (!element || element === document.documentElement) {
-	 		        	foundElement = false;
-	 		            break;
-	 		        }
-	 		        elementList.push(element);
-	 		        old_visibility.push(element.style.visibility);
-	 		        element.style.visibility = 'hidden'; // Temporarily hide the element (without changing the layout)
+		var _this = this;
+		this.onFrame = function(frame) {	
+			function clickableElementsFromPoint(x, y) {
+				let element, elementList = [];
+				let old_visibility = [];
+				let foundElement;
+				while (true) {
+					// get element under point x, y
+					element = document.elementFromPoint(x, y);
+					if (!element || element === document.documentElement) {
+						foundElement = false;
+						break;
+					}
+					if('click' in element && element.id != 'hand') {
+						foundElement = true;
+						break;
+					}
+					elementList.push(element);
+					old_visibility.push(element.style.visibility);
+					element.style.visibility = 'hidden'; // Temporarily hide the element (without changing the layout)
 
-	 		        if('click' in element && element.id != 'hand') {
-	 		        	foundElement = true;
-	 		        	break;
-	 		        }
-	 		    }
-	 		    for (var k = 0; k < elementList.length; k++) {
-	 		        elementList[k].style.visibility = old_visibility[k];
-	 		    }
-	 		    if(foundElement) {
-	 		    	return elementList.pop();
-	 		    } else {
-	 		    	return null;
-	 		    }
-	 		}
+				}
+				for (var k = 0; k < elementList.length; k++) {
+					elementList[k].style.visibility = old_visibility[k];
+				}
+				// if(debugoutput) {
+				// 	console.log('list length: ', elementList.length);
+				// 	if(elementList.length > 1) {
+				// 		for(let x of elementList) {
+				// 			console.log(x);
+				// 		}
+				// 		leapdebug = elementList;
+				// 	}
+				// }
+				if(foundElement) {
+					return element;
+				} else {
+					return null;
+				}
+			}
 
 			var hand;
 			if(hand = frame.hands[0]) {
@@ -278,6 +289,7 @@ LeapTrainer.Controller = Class.extend({
 				// console.log(pos[0], pos[1]);
 				let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
 				let pos_y = pos[1] * 2.5 + window.innerHeight;
+
 				let area = CENTER;
 				if(pos_x < window.innerWidth * 0.2 && pos_y < 0) {
 					area = UPPER_LEFT;
@@ -321,16 +333,15 @@ LeapTrainer.Controller = Class.extend({
 					}
 				}
 
-				$('#hand').css({
+				let handEle = $('#hand');
+				handEle.css({
 					left: (pos_x + $(window).scrollLeft()) + 'px',
 					top: (pos_y + $(window).scrollTop()) + 'px'
 				});
 
-				let ele = clickableElementsFromPoint(pos_x, pos_y);
-				if(ele) {
-					// console.log(ele);
-					_this.currentPointingHref = ele;
-				}
+				handEle[0].style.visibility = 'hidden';
+				_this.currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
+				handEle[0].style.visibility = '';
 
 				// _this.currentPointingHref = null;
 				// $('a').each(function() {
@@ -347,17 +358,17 @@ LeapTrainer.Controller = Class.extend({
 				// 	}
 				// });
 			}
-	 		/*
-	 		 * The pause() and resume() methods can be used to temporarily disable frame monitoring.
-	 		 */
-	 		if (this.paused) { return; }
+			/*
+			 * The pause() and resume() methods can be used to temporarily disable frame monitoring.
+			 */
+			if (this.paused) { return; }
 
-	 		/*
-	 		 * Frames are ignored if they occur too soon after a gesture was recognized.
-	 		 */
-	 		if (new Date().getTime() - this.lastHit < this.downtime) { return; }
+			/*
+			 * Frames are ignored if they occur too soon after a gesture was recognized.
+			 */
+			if (new Date().getTime() - this.lastHit < this.downtime) { return; }
 
-	 		/*
+			/*
 			 * The recordableFrame function returns true or false - by default based on the overall velocity of the hands and pointables in the frame.  
 			 * 
 			 * If it returns true recording should either start, or the current frame should be added to the existing recording.  
@@ -439,9 +450,9 @@ LeapTrainer.Controller = Class.extend({
 			
 		}; // The frame listener is bound to the context of the LeapTrainer object
 
-	 	/**
-	 	 * This is the frame listening function, which will be called by the Leap.Controller on every frame.
-	 	 */
+		/**
+		 * This is the frame listening function, which will be called by the Leap.Controller on every frame.
+		 */
 		this.controller.on('frame',	this.onFrame.bind(this)); 
 		
 		/*
@@ -1283,8 +1294,8 @@ LeapTrainer.TemplateMatcher = Class.extend({
 					ppz = pp.z;
 
 					q = new LeapTrainer.Point((ppx + ((interval - dist) / d) * (p.x - ppx)), 
-											  (ppy + ((interval - dist) / d) * (p.y - ppy)),
-											  (ppz + ((interval - dist) / d) * (p.z - ppz)), p.stroke);
+												(ppy + ((interval - dist) / d) * (p.y - ppy)),
+												(ppz + ((interval - dist) / d) * (p.z - ppz)), p.stroke);
 					
 					resampledGesture.push(q);
 					
@@ -1378,8 +1389,8 @@ LeapTrainer.TemplateMatcher = Class.extend({
 			g = gesture[i];
 
 			gesture[i] = new LeapTrainer.Point((g.x + centroid.x - center.x), 
-											   (g.y + centroid.y - center.y), 
-											   (g.z + centroid.z - center.z), g.stroke);
+												 (g.y + centroid.y - center.y), 
+												 (g.z + centroid.z - center.z), g.stroke);
 		}
 
 		return gesture;
