@@ -249,12 +249,13 @@ LeapTrainer.Controller = Class.extend({
 				let foundElement;
 				while (true) {
 					// get element under point x, y
+					// element with 'pointer-events': 'none' won't be catch
 					element = document.elementFromPoint(x, y);
 					if (!element || element === document.documentElement) {
 						foundElement = false;
 						break;
 					}
-					if('click' in element && element.id != 'hand') {
+					if('click' in element) {
 						foundElement = true;
 						break;
 					}
@@ -282,13 +283,23 @@ LeapTrainer.Controller = Class.extend({
 				}
 			}
 
+			function mapScrollSpeed(dist) {
+				const deadzone = 100;
+				if(dist <= deadzone)
+					return 0;
+				else {
+					return Math.ceil((dist-deadzone)/200) * 10;
+				}
+			}
+
 			var hand;
 			if(hand = frame.hands[0]) {
 				// 0 left-right 1 up-down 2 front-back
 				let pos = hand.screenPosition();
-				// console.log(pos[0], pos[1]);
+				// console.log(pos);
 				let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
 				let pos_y = pos[1] * 2.5 + window.innerHeight;
+				// let pos_y = pos[2] * 2.5;
 
 				let area = CENTER;
 				if(pos_x < window.innerWidth * 0.2 && pos_y < 0) {
@@ -300,14 +311,31 @@ LeapTrainer.Controller = Class.extend({
 				} else if(pos_x > window.innerWidth * 0.8 && pos_y > window.innerHeight) {
 					area = LOWER_RIGHT;
 				} else if(pos_x > window.innerWidth * 0.3 && pos_x < window.innerWidth * 0.7) {
+					let dist = 0;
 					if(pos_y < 0) {
 						area = UP;
-						chrome.runtime.sendMessage({"message": "scroll_up_current_tab"});
-					}
+						dist = mapScrollSpeed(-pos_y);
+
+						chrome.runtime.sendMessage({
+							"message": "scroll_up_current_tab", 
+							"speed": mapScrollSpeed(-pos_y)
+						});
+					} 
 					else if(pos_y > window.innerHeight) {
 						area = DOWN;
-						chrome.runtime.sendMessage({"message": "scroll_down_current_tab"});
+						dist = mapScrollSpeed(pos_y - window.innerHeight);
+
+						chrome.runtime.sendMessage({
+							"message": "scroll_down_current_tab",
+							"speed": mapScrollSpeed(pos_y - window.innerHeight)
+						});
 					}
+
+					$('#debughint').html(String(dist));
+					$('#debughint').css({
+						left: ($(window).scrollLeft()) + 'px',
+						top: ($(window).scrollTop()) + 'px'
+					});
 				}
 
 				if(area != this.currentHandArea) {
@@ -331,6 +359,10 @@ LeapTrainer.Controller = Class.extend({
 							'opacity': '0'
 						}, 'slow');
 					}
+					$('#hint').css({
+						left: ($(window).scrollLeft()) + 'px',
+						top: ($(window).scrollTop()) + 'px'
+					});
 				}
 
 				let handEle = $('#hand');
@@ -339,9 +371,9 @@ LeapTrainer.Controller = Class.extend({
 					top: (pos_y + $(window).scrollTop()) + 'px'
 				});
 
-				handEle[0].style.visibility = 'hidden';
+				// handEle[0].style.visibility = 'hidden';
 				_this.currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
-				handEle[0].style.visibility = '';
+				// handEle[0].style.visibility = '';
 
 				// _this.currentPointingHref = null;
 				// $('a').each(function() {

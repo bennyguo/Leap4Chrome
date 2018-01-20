@@ -7,7 +7,8 @@ $('#hand').css({
 	'background': 'red',
 	'left': 0,
 	'bottom': 0,
-	'z-index': 10000
+	'z-index': 10000,
+	'pointer-events': 'none'
 });
 
 // text hint
@@ -22,7 +23,25 @@ $('#hint').css({
 	'font-size': '80px',
 	'color': '#aaaaaa',
 	'z-index': 10000,
-	'opacity': 0
+	'opacity': 0,
+	'pointer-events': 'none'
+});
+
+
+// debug hint
+$('body').append('<div id="debughint"><\/div>');
+$('#debughint').css({
+	'position': 'absolute',
+	'left': 0,
+	'top': 0,
+	'width': '100%',
+	'margin-top': '200px',
+	'text-align': 'center',
+	'font-size': '80px',
+	'color': '#aaaaaa',
+	'z-index': 10000,
+	'opacity': 1,
+	'pointer-events': 'none'
 });
 
 

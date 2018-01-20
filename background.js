@@ -65,7 +65,7 @@ chrome.runtime.onMessage.addListener(
 					let activeTab = tabs[0];
 					// use window.scrollBy(dx, dy);
 					chrome.tabs.executeScript(activeTab.id, {
-						code: 'window.scrollBy(0, -10)'
+						code: `window.scrollBy(0, -${request.speed})`
 					});
 				});
 				break;
@@ -74,7 +74,7 @@ chrome.runtime.onMessage.addListener(
 					let activeTab = tabs[0];
 					// use window.scrollBy(dx, dy);
 					chrome.tabs.executeScript(activeTab.id, {
-						code: 'window.scrollBy(0, 10)'
+						code: `window.scrollBy(0, ${request.speed})`
 					});
 				});
 				break;
