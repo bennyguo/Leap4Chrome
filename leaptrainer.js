@@ -42,15 +42,6 @@ var LeapTrainer = {};
 var leapdebug = null;
 var debugoutput = false;
 
-// positions
-const CENTER = 0
-const UPPER_LEFT = 1;
-const UPPER_RIGHT = 2;
-const LOWER_LEFT = 3;
-const LOWER_RIGHT = 4;
-const UP = 5;
-const DOWN = 6;
-
 /**
  * Create the basic class structure.
  * 
@@ -170,10 +161,7 @@ LeapTrainer.Controller = Class.extend({
 	paused					: false,// This variable is set by the pause() method and unset by the resume() method - when true it disables frame monitoring temporarily.
 
 	renderableGesture		: null, // Implementations that record a gestures for graphical rendering should store the data for the last detected gesture in this array.
-	
-	currentPointingHref		: null, // New feature!
 
-	currentHandArea			: CENTER, // New feature!
 	/**
 	 * The controller initialization function - this is called just after a new instance of the controller is created to parse the options array, 
 	 * connect to the Leap Motion device (unless an existing Leap.Controller object was passed as a parameter), and register a frame listener with 
@@ -223,8 +211,11 @@ LeapTrainer.Controller = Class.extend({
 	 * This bound frame listener function fires the 'gesture-detected', 'started-recording', and 'stopped-recording' events.
 	 * 
 	 */
-	bindFrameListener: function () {
+	
+	// costumized onframe hook
+	costumizedOnFrame: null,
 
+	bindFrameListener: function() {
 		/*
 		 * Variables are declared locally here once in order to minimize variable creation and lookup in the high-speed frame listener.
 		 */
@@ -237,158 +228,9 @@ LeapTrainer.Controller = Class.extend({
 		recordValue		 = function (val) 	{ gesture.push(isNaN(val) ? 0.0 : val); },
 		recordVector	 = function (v) 	{ recordValue(v[0]); recordValue(v[1]); recordValue(v[2]); };
 
-		/**
-		 * 
-		 */
-
-		var _this = this;
-		this.onFrame = function(frame) {	
-			function clickableElementsFromPoint(x, y) {
-				let element, elementList = [];
-				let old_visibility = [];
-				let foundElement;
-				while (true) {
-					// get element under point x, y
-					// element with 'pointer-events': 'none' won't be catch
-					element = document.elementFromPoint(x, y);
-					if (!element || element === document.documentElement) {
-						foundElement = false;
-						break;
-					}
-					if('click' in element) {
-						foundElement = true;
-						break;
-					}
-					elementList.push(element);
-					old_visibility.push(element.style.visibility);
-					element.style.visibility = 'hidden'; // Temporarily hide the element (without changing the layout)
-
-				}
-				for (var k = 0; k < elementList.length; k++) {
-					elementList[k].style.visibility = old_visibility[k];
-				}
-				// if(debugoutput) {
-				// 	console.log('list length: ', elementList.length);
-				// 	if(elementList.length > 1) {
-				// 		for(let x of elementList) {
-				// 			console.log(x);
-				// 		}
-				// 		leapdebug = elementList;
-				// 	}
-				// }
-				if(foundElement) {
-					return element;
-				} else {
-					return null;
-				}
-			}
-
-			function mapScrollSpeed(dist) {
-				const deadzone = 100;
-				if(dist <= deadzone)
-					return 0;
-				else {
-					return Math.ceil((dist-deadzone)/200) * 10;
-				}
-			}
-
-			var hand;
-			if(hand = frame.hands[0]) {
-				// 0 left-right 1 up-down 2 front-back
-				let pos = hand.screenPosition();
-				// console.log(pos);
-				let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
-				let pos_y = pos[1] * 2.5 + window.innerHeight;
-				// let pos_y = pos[2] * 2.5;
-
-				let area = CENTER;
-				if(pos_x < window.innerWidth * 0.2 && pos_y < 0) {
-					area = UPPER_LEFT;
-				} else if(pos_x > window.innerWidth * 0.8 && pos_y < 0) {
-					area = UPPER_RIGHT;
-				} else if(pos_x < window.innerWidth * 0.2 && pos_y > window.innerHeight) {
-					area = LOWER_LEFT;
-				} else if(pos_x > window.innerWidth * 0.8 && pos_y > window.innerHeight) {
-					area = LOWER_RIGHT;
-				} else if(pos_x > window.innerWidth * 0.3 && pos_x < window.innerWidth * 0.7) {
-					let dist = 0;
-					if(pos_y < 0) {
-						area = UP;
-						dist = mapScrollSpeed(-pos_y);
-
-						chrome.runtime.sendMessage({
-							"message": "scroll_up_current_tab", 
-							"speed": mapScrollSpeed(-pos_y)
-						});
-					} 
-					else if(pos_y > window.innerHeight) {
-						area = DOWN;
-						dist = mapScrollSpeed(pos_y - window.innerHeight);
-
-						chrome.runtime.sendMessage({
-							"message": "scroll_down_current_tab",
-							"speed": mapScrollSpeed(pos_y - window.innerHeight)
-						});
-					}
-
-					$('#debughint').html(String(dist));
-					$('#debughint').css({
-						left: ($(window).scrollLeft()) + 'px',
-						top: ($(window).scrollTop()) + 'px'
-					});
-				}
-
-				if(area != this.currentHandArea) {
-					this.currentHandArea = area;
-					console.log(area);
-					if(area == UPPER_LEFT) {
-						$('#hint').html('向后');
-					} else if(area == UPPER_RIGHT) {
-						$('#hint').html('向前');
-					} else if(area == LOWER_LEFT) {
-						$('#hint').html('某个功能');
-					} else if(area == LOWER_RIGHT) {
-						$('#hint').html('关闭标签页');
-					}
-					if(area != CENTER && area != UP && area != DOWN) {
-						$('#hint').animate({
-							'opacity': '1'
-						}, 'slow');
-					} else {
-						$('#hint').animate({
-							'opacity': '0'
-						}, 'slow');
-					}
-					$('#hint').css({
-						left: ($(window).scrollLeft()) + 'px',
-						top: ($(window).scrollTop()) + 'px'
-					});
-				}
-
-				let handEle = $('#hand');
-				handEle.css({
-					left: (pos_x + $(window).scrollLeft()) + 'px',
-					top: (pos_y + $(window).scrollTop()) + 'px'
-				});
-
-				// handEle[0].style.visibility = 'hidden';
-				_this.currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
-				// handEle[0].style.visibility = '';
-
-				// _this.currentPointingHref = null;
-				// $('a').each(function() {
-				// 	let href_pos = this.getBoundingClientRect();
-				// 	if(pos_x > href_pos.x && pos_x < href_pos.x + href_pos.width &&
-				// 	   pos_y > href_pos.y && pos_y < href_pos.y + href_pos.height) {
-				// 		$(this).css({
-				// 			'color': 'green'
-				// 		});
-				// 		if(this.href) {
-				// 			// _this.currentPointingHref = this.href;
-				// 			_this.currentPointingHref = this;
-				// 		}
-				// 	}
-				// });
+		this.onFrame = function(frame) {
+			if(this.costumizedOnFrame) {
+				this.costumizedOnFrame(frame);	
 			}
 			/*
 			 * The pause() and resume() methods can be used to temporarily disable frame monitoring.
@@ -410,7 +252,6 @@ LeapTrainer.Controller = Class.extend({
 			 * 
 			 */
 			if (this.recordableFrame(frame, this.minRecordingVelocity, this.maxRecordingVelocity)) {
-	
 				/*
 				 * If this is the first frame in a gesture, we clean up some running values and fire the 'started-recording' event.
 				 */
