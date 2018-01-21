@@ -41,6 +41,8 @@
 var LeapTrainer = {};
 var leapdebug = null;
 var debugoutput = false;
+var startrecord = false;
+var endrecord = false;
 
 // positions
 const CENTER = 0
@@ -242,7 +244,42 @@ LeapTrainer.Controller = Class.extend({
 		 */
 
 		var _this = this;
-		this.onFrame = function(frame) {	
+		var record = [], frametimes = [];
+		var lasttime = null;
+
+		function Filter(coeffB) {
+			this.coeffB = coeffB;
+			this.xlength = coeffB.length;
+			this.xlist = []; 
+			this.xlist.length = coeffB.length;
+			this.xlist.fill(0);
+
+			this.call = function(newx) {
+				this.xlist.unshift(newx);
+				this.xlist.pop();
+				var y = 0;
+				for(let i=0; i<this.xlength; i++) {
+					y += this.coeffB[i] * this.xlist[i];
+				}
+				return y;
+			}
+		}
+		function Filter3D() {
+			const B = [0.0533, 0.0642, 0.0739, 0.0820, 0.0881, 0.0919, 0.0932, 0.0919, 0.0881, 0.0820, 0.0739, 0.0642, 0.0533];
+			this.filters = [];
+			for(let i=0; i<3; i++)
+				this.filters.push(new Filter(B));
+			this.call = function(newCord) {
+				var ret = [];
+				for(let i=0; i<3; i++) {
+					ret.push(this.filters[i].call(newCord[i]));
+				}
+				return ret;
+			}
+		}
+		var stablizer = new Filter3D();
+
+		this.onFrame = function(frame) {
 			function clickableElementsFromPoint(x, y) {
 				let element, elementList = [];
 				let old_visibility = [];
@@ -291,11 +328,30 @@ LeapTrainer.Controller = Class.extend({
 					return Math.ceil((dist-deadzone)/200) * 10;
 				}
 			}
-
+			leapdebug = frame;
 			var hand;
 			if(hand = frame.hands[0]) {
+				if(startrecord) {
+					record.push(hand.screenPosition());
+					let time = new Date();
+					if(lasttime) {
+						frametimes.push(time - lasttime);
+					}
+					lasttime = time;
+				}
+				if(endrecord || record.length >= 300) {
+					console.log('record = [\n' + record.map(x => x.toString()).map(x => `[${x}]`).join('\n') + '];');
+					console.log(frametimes.toString());
+					console.log(`length: ${frametimes.length} mean: ${frametimes.reduce((x, y) => x+y) / frametimes.length}`);
+					record = [];
+					frametimes = [];
+					startrecord = false;
+					endrecord = false;
+					lasttime = null;
+				}
+
 				// 0 left-right 1 up-down 2 front-back
-				let pos = hand.screenPosition();
+				let pos = stablizer.call(hand.screenPosition());
 				// console.log(pos);
 				let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
 				let pos_y = pos[1] * 2.5 + window.innerHeight;
@@ -330,12 +386,6 @@ LeapTrainer.Controller = Class.extend({
 							"speed": mapScrollSpeed(pos_y - window.innerHeight)
 						});
 					}
-
-					$('#debughint').html(String(dist));
-					$('#debughint').css({
-						left: ($(window).scrollLeft()) + 'px',
-						top: ($(window).scrollTop()) + 'px'
-					});
 				}
 
 				if(area != this.currentHandArea) {
@@ -359,21 +409,29 @@ LeapTrainer.Controller = Class.extend({
 							'opacity': '0'
 						}, 'slow');
 					}
-					$('#hint').css({
-						left: ($(window).scrollLeft()) + 'px',
-						top: ($(window).scrollTop()) + 'px'
-					});
 				}
+				$('#debughint').html(
+					`palm ${hand.palmPosition.map(x => x.toFixed(2)).join(' ')}<br/>
+					stabled ${hand.stabilizedPalmPosition.map(x => x.toFixed(2)).join(' ')}<br/>
+					speed ${hand.palmVelocity.map(x => x.toFixed(2)).join(' ')}<br/>
+					sphere ${hand.sphereCenter.map(x => x.toFixed(2)).join(' ')}<br/>
+					`
+				);
 
-				let handEle = $('#hand');
-				handEle.css({
+				$('#hint').css({
+					left: ($(window).scrollLeft()) + 'px',
+					top: ($(window).scrollTop()) + 'px'
+				});
+				$('#debughint').css({
+					left: ($(window).scrollLeft()) + 'px',
+					top: ($(window).scrollTop()) + 'px'
+				});
+				$('#hand').css({
 					left: (pos_x + $(window).scrollLeft()) + 'px',
 					top: (pos_y + $(window).scrollTop()) + 'px'
 				});
 
-				// handEle[0].style.visibility = 'hidden';
 				_this.currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
-				// handEle[0].style.visibility = '';
 
 				// _this.currentPointingHref = null;
 				// $('a').each(function() {
