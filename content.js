@@ -35,10 +35,10 @@ $('#debughint').css({
 	'left': 0,
 	'top': 0,
 	'width': '100%',
-	'margin-top': '200px',
-	'text-align': 'center',
-	'font-size': '80px',
-	'color': '#aaaaaa',
+	'margin-top': '10px',
+	'text-align': 'left',
+	'font-size': '20px',
+	'color': '#808080',
 	'z-index': 10000,
 	'opacity': 1,
 	'pointer-events': 'none'
@@ -92,6 +92,40 @@ function mapScrollSpeed(dist) {
 	}
 }
 
+// digital filter
+function Filter(coeffB) {
+	this.coeffB = coeffB;
+	this.xlength = coeffB.length;
+	this.xlist = []; 
+	this.xlist.length = coeffB.length;
+	this.xlist.fill(0);
+
+	this.call = function(newx) {
+		this.xlist.unshift(newx);
+		this.xlist.pop();
+		var y = 0;
+		for(let i=0; i<this.xlength; i++) {
+			y += this.coeffB[i] * this.xlist[i];
+		}
+		return y;
+	}
+}
+function Filter3D() {
+	const B = [0.0533, 0.0642, 0.0739, 0.0820, 0.0881, 0.0919, 0.0932, 0.0919, 0.0881, 0.0820, 0.0739, 0.0642, 0.0533];
+	this.filters = [];
+	for(let i=0; i<3; i++)
+		this.filters.push(new Filter(B));
+	this.call = function(newCord) {
+		var ret = [];
+		for(let i=0; i<3; i++) {
+			ret.push(this.filters[i].call(newCord[i]));
+		}
+		return ret;
+	}
+}
+var stablizer = new Filter3D();
+// digital filter end
+
 // positions
 const CENTER = 0
 const UPPER_LEFT = 1;
@@ -118,13 +152,46 @@ var closeDecLoop = setInterval(function() {
 		closeCount--;
 	}	
 }, 500);
+
+var leapdebug = 0;
+var startrecord = false;
+var endrecord = false;
+var record = [], frametimes = [];
+var lasttime = null;
+
 var myOnFrameHook = function(frame) {
 	var hand;
 	if(hand = frame.hands[0]) {
-		if(hand.grabStrength > 1 - 1e-5)
-			isFist = true;
+		leapdebug = frame;
+		$('#debughint').html(
+		`${hand.grabStrength}<br/>
+		`);
+		$('#debughint').css({
+			left: ($(window).scrollLeft()) + 'px',
+			top: ($(window).scrollTop()) + 'px'
+		});
+		if(startrecord) {
+			record.push(hand.screenPosition());
+			let time = new Date();
+			if(lasttime) {
+				frametimes.push(time - lasttime);
+			}
+			lasttime = time;
+		}
+		if(endrecord || frametimes.length >= 299) {
+			console.log('record = [\n' + record.map(x => x.toString()).map(x => `[${x}]`).join('\n') + '];');
+			console.log(frametimes.toString());
+			console.log(`length: ${frametimes.length} mean: ${frametimes.reduce((x, y) => x+y) / frametimes.length}`);
+			record = [];
+			frametimes = [];
+			startrecord = false;
+			endrecord = false;
+			lasttime = null;
+		}
+
+		isFist = (hand.grabStrength > 1 - 1e-5);
 		// 0 left-right 1 up-down 2 front-back
-		let pos = hand.screenPosition();
+		let pos = stablizer.call(hand.screenPosition());
 		// console.log(pos);
 		let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
 		let pos_y = pos[1] * 2.5 + window.innerHeight;
@@ -147,8 +214,6 @@ var myOnFrameHook = function(frame) {
 			let dist = 0;
 			if(pos_y < 0) {
 				area = UP;
-				dist = mapScrollSpeed(-pos_y);
-
 				chrome.runtime.sendMessage({
 					"message": "scroll_up_current_tab", 
 					"speed": mapScrollSpeed(-pos_y)
@@ -156,30 +221,23 @@ var myOnFrameHook = function(frame) {
 			} 
 			else if(pos_y > window.innerHeight) {
 				area = DOWN;
-				dist = mapScrollSpeed(pos_y - window.innerHeight);
-
 				chrome.runtime.sendMessage({
 					"message": "scroll_down_current_tab",
 					"speed": mapScrollSpeed(pos_y - window.innerHeight)
 				});
 			}
-
-			$('#debughint').html(String(dist));
-			$('#debughint').css({
-				left: ($(window).scrollLeft()) + 'px',
-				top: ($(window).scrollTop()) + 'px'
-			});
 		}
 
-		if(!isFist)
+		if(!isFist || currentHandArea != area) {
 			clearTimeout(funcTimeout);
-		else if(currentHandArea != area) {
-			clearTimeout(funcTimeout);
-			if(area == LEFT && isFist) {
+			funcTimeout = null;
+		}
+		else {
+			if(area == LEFT && isFist && !funcTimeout) {
 				funcTimeout = setTimeout(function() {
 					chrome.runtime.sendMessage({"message": "go_back_current_tab"});
 				}, 1000);
-			} else if(area == RIGHT && isFist) {
+			} else if(area == RIGHT && isFist && !funcTimeout) {
 				funcTimeout = setTimeout(function() {
 					chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
 				}, 1000);
@@ -230,7 +288,7 @@ var myOnFrameHook = function(frame) {
 			currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
 		else
 			currentPointingHref = null;
-		if(currentPointingHref && currentPointingHref != lastPointingHref) {
+		if(currentPointingHref && currentPointingHref != lastPointingHref && isFist) {
 			clearTimeout(clickTimeout);
 			clickTimeout = setTimeout(function(clickable) {
 				clickable.click();
@@ -375,19 +433,19 @@ leapController.use('screenPosition', {});
 var trainer = new LeapTrainer.MyController();
 // trainer.fromJSON(swipe_left);
 // trainer.fromJSON(swipe_right);
-trainer.fromJSON(stop1);
-trainer.fromJSON(stop2);
-trainer.fromJSON(stop3);
-trainer.fromJSON(stop4);
-trainer.fromJSON(stop5);
-trainer.on('SWIPE_LEFT', function() { 
-	console.log('swipe-left');
-	// chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
-});
-trainer.on('SWIPE_RIGHT', function() { 
-	console.log('swipe-right');
-	// chrome.runtime.sendMessage({"message": "go_back_current_tab"});
-});
+// trainer.fromJSON(stop1);
+// trainer.fromJSON(stop2);
+// trainer.fromJSON(stop3);
+// trainer.fromJSON(stop4);
+// trainer.fromJSON(stop5);
+// trainer.on('SWIPE_LEFT', function() { 
+// 	console.log('swipe-left');
+// 	// chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
+// });
+// trainer.on('SWIPE_RIGHT', function() { 
+// 	console.log('swipe-right');
+// 	// chrome.runtime.sendMessage({"message": "go_back_current_tab"});
+// });
 
 function stop_function() {
 	console.log('stop');
@@ -414,8 +472,8 @@ function stop_function() {
 	}
 }
 
-trainer.on('STOP1', stop_function);
-trainer.on('STOP2', stop_function);
-trainer.on('STOP3', stop_function);
-trainer.on('STOP4', stop_function);
-trainer.on('STOP5', stop_function);
+// trainer.on('STOP1', stop_function);
+// trainer.on('STOP2', stop_function);
+// trainer.on('STOP3', stop_function);
+// trainer.on('STOP4', stop_function);
+// trainer.on('STOP5', stop_function);
