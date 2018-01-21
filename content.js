@@ -86,7 +86,7 @@ function mapScrollSpeed(dist) {
 
 // digital filter
 function Filter(coeffB) {
-	this.coeffB = coeffB;
+	// this.coeffB = coeffB;
 	this.xlength = coeffB.length;
 	this.xlist = []; 
 	this.xlist.length = coeffB.length;
@@ -97,28 +97,85 @@ function Filter(coeffB) {
 		this.xlist.pop();
 		var y = 0;
 		for(let i=0; i<this.xlength; i++) {
-			y += this.coeffB[i] * this.xlist[i];
+			y += coeffB[i] * this.xlist[i];
 		}
 		return y;
 	}
 }
 
 function Filter3D() {
-	const B = [0.0533, 0.0642, 0.0739, 0.0820, 0.0881, 0.0919, 0.0932, 0.0919, 0.0881, 0.0820, 0.0739, 0.0642, 0.0533];
+	// const B = [0.0533, 0.0642, 0.0739, 0.0820, 0.0881, 0.0919, 0.0932, 0.0919, 0.0881, 0.0820, 0.0739, 0.0642, 0.0533];
+	const B = [0.0935, 0.1403, 0.1734, 0.1854, 0.1734, 0.1403, 0.0935];
 	this.filters = [];
 	for(let i=0; i<3; i++)
 		this.filters.push(new Filter(B));
 	this.call = function(newCord) {
+
 		var ret = [];
 		for(let i=0; i<3; i++) {
 			ret.push(this.filters[i].call(newCord[i]));
 		}
 		return ret;
 	}
+
+	this.frametimes = [];
+	this.detectFPS = false;
+	this.detectLen = 10;
 }
 
 var stablizer = new Filter3D();
 // digital filter end
+
+const waitTime = 800;
+
+function DelayComparator(maxtime) {
+	this.maxtime = maxtime;
+	this.buf = []; // smaller is older
+	this.buf.push({data: NaN, time: new Date()});
+	this.enable = true;
+	// this.waitForResume = false;
+
+	this.compare = function(num) {
+		if(this.enable) {
+			let t = new Date();
+			this.buf.push({data: num, time: t});
+			let elapsedTime = t - this.buf[0].time;
+			let speed = (elapsedTime > 1e-4)? (num - this.buf[0].data)/elapsedTime : 0;
+			if(t - this.buf[0].time > maxtime*3) {
+				this.reset(waitTime);
+				return [0, 0];
+			}
+			while(t - this.buf[0].time > maxtime) {
+				this.buf.shift();
+			}
+
+			return [elapsedTime, speed];
+		} else {
+			return [0, 0];
+		}
+	}
+	var _this = this;
+	this.reset = function(waittime) {
+		this.buf = [];
+		if(waittime > 0)
+			this.enable = false;
+		setTimeout(function() {
+			_this.enable = true;
+			console.log('timeout');
+		}, waittime);
+	}
+}
+
+yawComparator = new DelayComparator(600);
+yawComparator.reset(waitTime);
+
+chrome.runtime.onMessage.addListener(
+	function(request, sender, sendResponse) {
+		if(request.message == 'reset comparator') {
+			yawComparator.reset(waitTime);
+		}
+	}
+);
 
 // positions
 const CENTER = 0
@@ -134,8 +191,11 @@ const RIGHT = 8;
 var lastPointingHref = null;
 var lastHandArea = CENTER;
 var isFist = false;
+var isRollLeft = false;
+var isRollRight = false;
 var clickTimeout = null;
 var funcTimeout = null;
+var switchTabTimeout = null;
 var closeCount = 0;
 var closeDecLoop = setInterval(function() {
 	console.log('close count: ' + closeCount);
@@ -158,9 +218,7 @@ var myOnFrameHook = function(frame) {
 	if(hand = frame.hands[0]) {
 		// debug information
 		leapdebug = frame;
-		$('#debughint').html(
-		`${hand.grabStrength}<br/>
-		`);
+
 		$('#debughint').css({
 			left: ($(window).scrollLeft()) + 'px',
 			top: ($(window).scrollTop()) + 'px'
@@ -173,7 +231,7 @@ var myOnFrameHook = function(frame) {
 			}
 			lasttime = time;
 		}
-		if(endrecord || frametimes.length >= 299) {
+		if(endrecord && startrecord || frametimes.length >= 299) {
 			console.log('record = [\n' + record.map(x => x.toString()).map(x => `[${x}]`).join('\n') + '];');
 			console.log(frametimes.toString());
 			console.log(`length: ${frametimes.length} mean: ${frametimes.reduce((x, y) => x+y) / frametimes.length}`);
@@ -184,11 +242,37 @@ var myOnFrameHook = function(frame) {
 			lasttime = null;
 		}
 
-		// process fist condition
+		// process fist, yaw condition
 		isFist = (hand.grabStrength > 1 - 1e-5);
+
+		let [time, speed] = yawComparator.compare(hand.direction[0]);
+		const gateSpeed = 0.6/1e3;
+		if(time > yawComparator.maxtime * 0.5 && Math.abs(speed) > gateSpeed) {
+			// if(hand.type == 'right') {
+			// 	isRollLeft = (speed <= -gateSpeed);
+			// 	isRollRight = (speed >= gateSpeed);
+			// } else {
+			// 	isRollLeft = (speed >= gateSpeed);
+			// 	isRollRight = (speed <= -gateSpeed);
+			// }
+			isRollLeft = (speed <= -gateSpeed);
+			isRollRight = (speed >= gateSpeed);
+			yawComparator.reset(waitTime);
+		} else {
+			isRollLeft = false;
+			isRollRight = false;
+		}
+
+		$('#debughint').html(
+		`${hand.grabStrength}<br/>
+		${hand.direction}<br/>
+		time: ${time}<br/>
+		speed: ${(speed*1e3).toFixed(2)}
+		`);
 
 		// get and smooth cursor position
 		// 0 left-right 1 up-down 2 front-back
+		// let pos = hand.screenPosition();
 		let pos = stablizer.call(hand.screenPosition());
 		let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
 		let pos_y = pos[1] * 2.5 + window.innerHeight;
@@ -211,6 +295,7 @@ var myOnFrameHook = function(frame) {
 			let dist = 0;
 			if(pos_y < 0) {
 				area = UP;
+				// console.log(mapScrollSpeed(-pos_y));
 				chrome.runtime.sendMessage({
 					"message": "scroll_up_current_tab", 
 					"speed": mapScrollSpeed(-pos_y)
@@ -250,23 +335,49 @@ var myOnFrameHook = function(frame) {
 		else {
 			if(area == LEFT && isFist && !funcTimeout) {
 				funcTimeout = setTimeout(function() {
-					chrome.runtime.sendMessage({"message": "go_back_current_tab"});
+					chrome.runtime.sendMessage({"message": "choose_left_tab"});
 				}, 1000);
 			} else if(area == RIGHT && isFist && !funcTimeout) {
 				funcTimeout = setTimeout(function() {
-					chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
+					chrome.runtime.sendMessage({"message": "choose_right_tab"});
 				}, 1000);
 			}
+		}
+
+		if(!isFist) {
+			if(isRollLeft) {
+				chrome.runtime.sendMessage({"message": "go_back_current_tab"});
+			} else if(isRollRight) {
+				chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
+			}
+			// if(switchTabTimeout == null) {
+			// 	if(isRollLeft) {
+			// 		switchTabTimeout = setTimeout(function() {
+			// 			chrome.runtime.sendMessage({"message": "choose_left_tab"});
+			// 			switchTabTimeout = null;
+			// 		}, 1000);
+			// 		console.log('roll left');
+			// 	} else if(isRollRight) {
+			// 		switchTabTimeout = setTimeout(function() {
+			// 			chrome.runtime.sendMessage({"message": "choose_right_tab"});
+			// 			switchTabTimeout = null;
+			// 		}, 1000);
+			// 		console.log('roll right');
+			// 	}
+			// } else if(!(isRollLeft || isRollRight)) {
+			// 	clearTimeout(switchTabTimeout);
+			// 	switchTabTimeout = null;
+			// }
 		}
 
 		// handle function hint
 		if(area != lastHandArea) {
 			console.log(area);
 			if(area == LEFT) {
-				$('#hint').html('向后');
+				$('#hint').html('上一标签页');
 				closeCount++;
 			} else if(area == RIGHT) {
-				$('#hint').html('向前');
+				$('#hint').html('下一标签页');
 				closeCount++;
 			}
 			if(area != CENTER && area != UP && area != DOWN) {

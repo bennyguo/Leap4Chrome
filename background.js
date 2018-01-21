@@ -5,6 +5,10 @@ chrome.browserAction.onClicked.addListener(function(tab) {
 	});
 });
 
+chrome.tabs.onActivated.addListener(function(info) {
+	chrome.tabs.sendMessage(info.tabId, {'message': 'reset comparator'});
+})
+
 chrome.runtime.onMessage.addListener(
 	function(request, sender, sendResponse) {
 		switch(request.message) {
@@ -63,6 +67,7 @@ chrome.runtime.onMessage.addListener(
 			case "scroll_up_current_tab":
 				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 					let activeTab = tabs[0];
+					// console.log(tabs);
 					// use window.scrollBy(dx, dy);
 					chrome.tabs.executeScript(activeTab.id, {
 						code: `window.scrollBy(0, -${request.speed})`
@@ -75,6 +80,26 @@ chrome.runtime.onMessage.addListener(
 					// use window.scrollBy(dx, dy);
 					chrome.tabs.executeScript(activeTab.id, {
 						code: `window.scrollBy(0, ${request.speed})`
+					});
+				});
+				break;
+			case "choose_left_tab":
+				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+					let activeTabIndex = tabs[0].index;
+					chrome.tabs.query({currentWindow: true}, function(tabs) {
+						let idx = (activeTabIndex - 1) + (activeTabIndex == 0) * (tabs.length);
+						let tabToActive = tabs[idx];
+						chrome.tabs.update(tabToActive.id, {active: true});
+					});
+				});
+				break;
+			case "choose_right_tab":
+				chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+					let activeTabIndex = tabs[0].index;
+					chrome.tabs.query({currentWindow: true}, function(tabs) {
+						let idx = (activeTabIndex + 1) % (tabs.length);
+						let tabToActive = tabs[idx];
+						chrome.tabs.update(tabToActive.id, {active: true});
 					});
 				});
 				break;
