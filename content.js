@@ -68,21 +68,13 @@ function clickableElementsFromPoint(x, y) {
 	for (var k = 0; k < elementList.length; k++) {
 		elementList[k].style.visibility = old_visibility[k];
 	}
-	// if(debugoutput) {
-	// 	console.log('list length: ', elementList.length);
-	// 	if(elementList.length > 1) {
-	// 		for(let x of elementList) {
-	// 			console.log(x);
-	// 		}
-	// 		leapdebug = elementList;
-	// 	}
-	// }
 	if(foundElement) {
 		return element;
 	} else {
 		return null;
 	}
 }
+
 function mapScrollSpeed(dist) {
 	const deadzone = 100;
 	if(dist <= deadzone)
@@ -110,6 +102,7 @@ function Filter(coeffB) {
 		return y;
 	}
 }
+
 function Filter3D() {
 	const B = [0.0533, 0.0642, 0.0739, 0.0820, 0.0881, 0.0919, 0.0932, 0.0919, 0.0881, 0.0820, 0.0739, 0.0642, 0.0533];
 	this.filters = [];
@@ -123,6 +116,7 @@ function Filter3D() {
 		return ret;
 	}
 }
+
 var stablizer = new Filter3D();
 // digital filter end
 
@@ -136,9 +130,9 @@ const UP = 5;
 const DOWN = 6;
 const LEFT = 7;
 const RIGHT = 8;
-var currentPointingHref = null; // New feature!
+
 var lastPointingHref = null;
-var currentHandArea = CENTER; // New feature!
+var lastHandArea = CENTER;
 var isFist = false;
 var clickTimeout = null;
 var funcTimeout = null;
@@ -151,7 +145,7 @@ var closeDecLoop = setInterval(function() {
 	} else if(closeCount > 0) {
 		closeCount--;
 	}	
-}, 500);
+}, 1000);
 
 var leapdebug = 0;
 var startrecord = false;
@@ -162,6 +156,7 @@ var lasttime = null;
 var myOnFrameHook = function(frame) {
 	var hand;
 	if(hand = frame.hands[0]) {
+		// debug information
 		leapdebug = frame;
 		$('#debughint').html(
 		`${hand.grabStrength}<br/>
@@ -189,14 +184,16 @@ var myOnFrameHook = function(frame) {
 			lasttime = null;
 		}
 
+		// process fist condition
 		isFist = (hand.grabStrength > 1 - 1e-5);
+
+		// get and smooth cursor position
 		// 0 left-right 1 up-down 2 front-back
 		let pos = stablizer.call(hand.screenPosition());
-		// console.log(pos);
 		let pos_x = (pos[0] - 0.5 * window.innerWidth) * 4.5 + window.innerWidth * 0.5;
 		let pos_y = pos[1] * 2.5 + window.innerHeight;
-		// let pos_y = pos[2] * 2.5;
 
+		// process cursor area
 		let area = CENTER;
 		if(pos_x < window.innerWidth * 0.2 && pos_y < 0) {
 			area = UPPER_LEFT;
@@ -228,7 +225,25 @@ var myOnFrameHook = function(frame) {
 			}
 		}
 
-		if(!isFist || currentHandArea != area) {
+		// handle cursor position
+		let handEle = $('#hand');
+		handEle.css({
+			left: (pos_x + $(window).scrollLeft()) + 'px',
+			top: (pos_y + $(window).scrollTop()) + 'px'
+		});
+		if(area == CENTER) {
+			handEle.css({
+				display: 'block'
+			});
+		} else {
+			handEle.css({
+				display: 'none'
+			});
+		}
+
+
+		// handle function area timer
+		if(!isFist || lastHandArea != area) {
 			clearTimeout(funcTimeout);
 			funcTimeout = null;
 		}
@@ -244,8 +259,8 @@ var myOnFrameHook = function(frame) {
 			}
 		}
 
-		if(area != currentHandArea) {
-			currentHandArea = area;
+		// handle function hint
+		if(area != lastHandArea) {
 			console.log(area);
 			if(area == LEFT) {
 				$('#hint').html('向后');
@@ -269,26 +284,13 @@ var myOnFrameHook = function(frame) {
 			});
 		}
 
-		let handEle = $('#hand');
-		handEle.css({
-			left: (pos_x + $(window).scrollLeft()) + 'px',
-			top: (pos_y + $(window).scrollTop()) + 'px'
-		});
-		if(currentHandArea == CENTER) {
-			handEle.css({
-				display: 'block'
-			});
-		} else {
-			handEle.css({
-				display: 'none'
-			});
-		}
-
+		// handle click timer
 		if(isFist)
 			currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
 		else
 			currentPointingHref = null;
-		if(currentPointingHref && currentPointingHref != lastPointingHref && isFist) {
+
+		if(currentPointingHref && currentPointingHref != lastPointingHref) {
 			clearTimeout(clickTimeout);
 			clickTimeout = setTimeout(function(clickable) {
 				clickable.click();
@@ -296,6 +298,9 @@ var myOnFrameHook = function(frame) {
 		} else if(currentPointingHref == null) {
 			clearTimeout(clickTimeout);
 		}
+
+		// update lastxxx values
+		lastHandArea = area;
 		lastPointingHref = currentPointingHref;
 	}
 }
@@ -429,51 +434,4 @@ LeapTrainer.MyController = LeapTrainer.CorrelationController.extend({
 
 var leapController = new Leap.Controller();
 leapController.use('screenPosition', {});
-// var trainer = new LeapTrainer.ANNController();
 var trainer = new LeapTrainer.MyController();
-// trainer.fromJSON(swipe_left);
-// trainer.fromJSON(swipe_right);
-// trainer.fromJSON(stop1);
-// trainer.fromJSON(stop2);
-// trainer.fromJSON(stop3);
-// trainer.fromJSON(stop4);
-// trainer.fromJSON(stop5);
-// trainer.on('SWIPE_LEFT', function() { 
-// 	console.log('swipe-left');
-// 	// chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
-// });
-// trainer.on('SWIPE_RIGHT', function() { 
-// 	console.log('swipe-right');
-// 	// chrome.runtime.sendMessage({"message": "go_back_current_tab"});
-// });
-
-function stop_function() {
-	console.log('stop');
-	switch(currentHandArea) {
-		// case UPPER_LEFT:
-		// 	chrome.runtime.sendMessage({"message": "go_back_current_tab"});
-		// 	break;
-		// case UPPER_RIGHT:
-		// 	chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
-		// 	break;
-		// case LOWER_LEFT:
-
-		// 	break;
-		// case LOWER_RIGHT:
-		// 	chrome.runtime.sendMessage({"message": "close_current_tab"});
-		// 	break;
-		// case CENTER:
-		// 	// chrome.runtime.sendMessage({"message": "open_new_tab", "url": trainer.currentPointingHref});
-		// 	if(currentPointingHref) {
-		// 		// window.location.href = trainer.currentPointingHref;
-		// 		currentPointingHref.click();
-		// 	}
-		// 	break;
-	}
-}
-
-// trainer.on('STOP1', stop_function);
-// trainer.on('STOP2', stop_function);
-// trainer.on('STOP3', stop_function);
-// trainer.on('STOP4', stop_function);
-// trainer.on('STOP5', stop_function);
