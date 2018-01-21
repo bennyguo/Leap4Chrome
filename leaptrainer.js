@@ -211,9 +211,6 @@ LeapTrainer.Controller = Class.extend({
 	 * This bound frame listener function fires the 'gesture-detected', 'started-recording', and 'stopped-recording' events.
 	 * 
 	 */
-	
-	// costumized onframe hook
-	costumizedOnFrame: null,
 
 	bindFrameListener: function() {
 		/*
@@ -229,9 +226,6 @@ LeapTrainer.Controller = Class.extend({
 		recordVector	 = function (v) 	{ recordValue(v[0]); recordValue(v[1]); recordValue(v[2]); };
 
 		this.onFrame = function(frame) {
-			if(this.costumizedOnFrame) {
-				this.costumizedOnFrame(frame);	
-			}
 			/*
 			 * The pause() and resume() methods can be used to temporarily disable frame monitoring.
 			 */

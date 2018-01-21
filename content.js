@@ -100,12 +100,29 @@ const LOWER_LEFT = 3;
 const LOWER_RIGHT = 4;
 const UP = 5;
 const DOWN = 6;
-currentPointingHref = null; // New feature!
-currentHandArea = CENTER; // New feature!
+const LEFT = 7;
+const RIGHT = 8;
+var currentPointingHref = null; // New feature!
+var lastPointingHref = null;
+var currentHandArea = CENTER; // New feature!
+var isFist = false;
+var clickTimeout = null;
+var funcTimeout = null;
+var closeCount = 0;
+var closeDecLoop = setInterval(function() {
+	console.log('close count: ' + closeCount);
+	if(closeCount > 2) {
+		chrome.runtime.sendMessage({"message": "close_current_tab"});
+		closeCount = 0;
+	} else if(closeCount > 0) {
+		closeCount--;
+	}	
+}, 500);
 var myOnFrameHook = function(frame) {
-	console.log('fuck');
 	var hand;
 	if(hand = frame.hands[0]) {
+		if(hand.grabStrength > 1 - 1e-5)
+			isFist = true;
 		// 0 left-right 1 up-down 2 front-back
 		let pos = hand.screenPosition();
 		// console.log(pos);
@@ -122,6 +139,10 @@ var myOnFrameHook = function(frame) {
 			area = LOWER_LEFT;
 		} else if(pos_x > window.innerWidth * 0.8 && pos_y > window.innerHeight) {
 			area = LOWER_RIGHT;
+		} else if(pos_x < 0 && pos_y > 0 && pos_y < window.innerHeight) {
+			area = LEFT;
+		} else if(pos_x > window.innerWidth && pos_y > 0 && pos_y < window.innerHeight) {
+			area = RIGHT;
 		} else if(pos_x > window.innerWidth * 0.3 && pos_x < window.innerWidth * 0.7) {
 			let dist = 0;
 			if(pos_y < 0) {
@@ -150,17 +171,30 @@ var myOnFrameHook = function(frame) {
 			});
 		}
 
+		if(!isFist)
+			clearTimeout(funcTimeout);
+		else if(currentHandArea != area) {
+			clearTimeout(funcTimeout);
+			if(area == LEFT && isFist) {
+				funcTimeout = setTimeout(function() {
+					chrome.runtime.sendMessage({"message": "go_back_current_tab"});
+				}, 1000);
+			} else if(area == RIGHT && isFist) {
+				funcTimeout = setTimeout(function() {
+					chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
+				}, 1000);
+			}
+		}
+
 		if(area != currentHandArea) {
 			currentHandArea = area;
 			console.log(area);
-			if(area == UPPER_LEFT) {
+			if(area == LEFT) {
 				$('#hint').html('向后');
-			} else if(area == UPPER_RIGHT) {
+				closeCount++;
+			} else if(area == RIGHT) {
 				$('#hint').html('向前');
-			} else if(area == LOWER_LEFT) {
-				$('#hint').html('某个功能');
-			} else if(area == LOWER_RIGHT) {
-				$('#hint').html('关闭标签页');
+				closeCount++;
 			}
 			if(area != CENTER && area != UP && area != DOWN) {
 				$('#hint').animate({
@@ -182,32 +216,163 @@ var myOnFrameHook = function(frame) {
 			left: (pos_x + $(window).scrollLeft()) + 'px',
 			top: (pos_y + $(window).scrollTop()) + 'px'
 		});
+		if(currentHandArea == CENTER) {
+			handEle.css({
+				display: 'block'
+			});
+		} else {
+			handEle.css({
+				display: 'none'
+			});
+		}
 
-		// handEle[0].style.visibility = 'hidden';
-		currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
-		// handEle[0].style.visibility = '';
-
-		// _this.currentPointingHref = null;
-		// $('a').each(function() {
-		// 	let href_pos = this.getBoundingClientRect();
-		// 	if(pos_x > href_pos.x && pos_x < href_pos.x + href_pos.width &&
-		// 	   pos_y > href_pos.y && pos_y < href_pos.y + href_pos.height) {
-		// 		$(this).css({
-		// 			'color': 'green'
-		// 		});
-		// 		if(this.href) {
-		// 			// _this.currentPointingHref = this.href;
-		// 			_this.currentPointingHref = this;
-		// 		}
-		// 	}
-		// });
+		if(isFist)
+			currentPointingHref = clickableElementsFromPoint(pos_x, pos_y);
+		else
+			currentPointingHref = null;
+		if(currentPointingHref && currentPointingHref != lastPointingHref) {
+			clearTimeout(clickTimeout);
+			clickTimeout = setTimeout(function(clickable) {
+				clickable.click();
+			}, 500, currentPointingHref);
+		} else if(currentPointingHref == null) {
+			clearTimeout(clickTimeout);
+		}
+		lastPointingHref = currentPointingHref;
 	}
 }
+
+LeapTrainer.MyController = LeapTrainer.CorrelationController.extend({
+	costumizedOnFrame: myOnFrameHook,
+	bindFrameListener: function() {
+		/*
+		 * Variables are declared locally here once in order to minimize variable creation and lookup in the high-speed frame listener.
+		 */
+		var recording = false, frameCount = 0, gesture = [],
+
+		/*
+		 * These two utility functions are used to push a vector (a 3-variable array of numbers) into the gesture array - which is the 
+		 * array used to store activity in a gesture during recording. NaNs are replaced with 0.0, though they shouldn't occur!
+		 */
+		recordValue		 = function (val) 	{ gesture.push(isNaN(val) ? 0.0 : val); },
+		recordVector	 = function (v) 	{ recordValue(v[0]); recordValue(v[1]); recordValue(v[2]); };
+
+		this.onFrame = function(frame) {
+			if(this.costumizedOnFrame) {
+				this.costumizedOnFrame(frame);	
+			}
+			/*
+			 * The pause() and resume() methods can be used to temporarily disable frame monitoring.
+			 */
+			if (this.paused) { return; }
+
+			/*
+			 * Frames are ignored if they occur too soon after a gesture was recognized.
+			 */
+			if (new Date().getTime() - this.lastHit < this.downtime) { return; }
+
+			/*
+			 * The recordableFrame function returns true or false - by default based on the overall velocity of the hands and pointables in the frame.  
+			 * 
+			 * If it returns true recording should either start, or the current frame should be added to the existing recording.  
+			 * 
+			 * If it returns false AND we're currently recording, then gesture recording has completed and the recognition function should be 
+			 * called to see what it can do with the collected frames.
+			 * 
+			 */
+			if (this.recordableFrame(frame, this.minRecordingVelocity, this.maxRecordingVelocity)) {
+				/*
+				 * If this is the first frame in a gesture, we clean up some running values and fire the 'started-recording' event.
+				 */
+				if (!recording) { 
+					
+					recording 				= true; 
+					frameCount 				= 0; 
+					gesture 				= []; 
+					this.renderableGesture 	= []; 
+					this.recordedPoseFrames = 0;
+
+					this.fire('started-recording'); 
+				}
+
+				/*
+				 * We count the number of frames recorded in a gesture in order to check that the 
+				 * frame count is greater than minGestureFrames when recording is complete.
+				 */
+				frameCount++;
+	
+				/*
+				 * The recordFrame function may be overridden, but in any case it's passed the current frame, the previous frame, and 
+				 * utility functions for adding vectors and individual values to the recorded gesture activity.
+				 */
+				this.recordFrame(frame, this.controller.frame(1), recordVector, recordValue);
+
+				/*
+				 * Since renderable frame data is not necessarily the same as frame data used for recognition, a renderable frame will be 
+				 * recorded here IF the implementation provides one.
+				 */
+				this.recordRenderableFrame(frame, this.controller.frame(1));
+				
+			} else if (recording) {
+
+				/*
+				 * If the frame should not be recorded but recording was active, then we deactivate recording and check to see if enough 
+				 * frames have been recorded to qualify for gesture recognition.
+				 */
+				recording = false;
+				
+				/*
+				 * As soon as we're no longer recording, we fire the 'stopped-recording' event
+				 */
+				this.fire('stopped-recording');
+	
+				if (this.recordingPose || frameCount >= this.minGestureFrames) {
+
+					/*
+					 * If a valid gesture was detected the 'gesture-detected' event fires, regardless of whether the gesture will be recognized or not.
+					 */
+					this.fire('gesture-detected', gesture, frameCount);
+					
+					/*
+					 * Finally we pass the recorded gesture frames to either the saveTrainingGesture or recognize functions (either of which may also 
+					 * be overridden) depending on whether we're currently training a gesture or not.
+					 * the time of the last hit.
+					 */
+					var gestureName = this.trainingGesture;
+
+					if (gestureName) { this.saveTrainingGesture(gestureName, gesture, this.recordingPose);
+
+					} else { this.recognize(gesture, frameCount); }
+
+					this.lastHit = new Date().getTime();
+
+					this.recordingPose 		= false;
+				};
+			};
+			
+		}; // The frame listener is bound to the context of the LeapTrainer object
+
+		/**
+		 * This is the frame listening function, which will be called by the Leap.Controller on every frame.
+		 */
+		this.controller.on('frame',	this.onFrame.bind(this)); 
+		
+		/*
+		 * If pauseOnWindowBlur is true, then we bind the pause function to the controller blur event and the resume 
+		 * function to the controller focus event
+		 */
+		if (this.pauseOnWindowBlur) {
+
+			this.controller.on('blur',	this.pause.bind(this));
+			this.controller.on('focus',	this.resume.bind(this)); 			
+		}
+	},
+});
 
 var leapController = new Leap.Controller();
 leapController.use('screenPosition', {});
 // var trainer = new LeapTrainer.ANNController();
-var trainer = new LeapTrainer.CorrelationController({customizedOnFrame: myOnFrameHook});
+var trainer = new LeapTrainer.MyController();
 // trainer.fromJSON(swipe_left);
 // trainer.fromJSON(swipe_right);
 trainer.fromJSON(stop1);
@@ -226,26 +391,26 @@ trainer.on('SWIPE_RIGHT', function() {
 
 function stop_function() {
 	console.log('stop');
-	switch(trainer.currentHandArea) {
-		case UPPER_LEFT:
-			chrome.runtime.sendMessage({"message": "go_back_current_tab"});
-			break;
-		case UPPER_RIGHT:
-			chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
-			break;
-		case LOWER_LEFT:
+	switch(currentHandArea) {
+		// case UPPER_LEFT:
+		// 	chrome.runtime.sendMessage({"message": "go_back_current_tab"});
+		// 	break;
+		// case UPPER_RIGHT:
+		// 	chrome.runtime.sendMessage({"message": "go_forward_current_tab"});
+		// 	break;
+		// case LOWER_LEFT:
 
-			break;
-		case LOWER_RIGHT:
-			chrome.runtime.sendMessage({"message": "close_current_tab"});
-			break;
-		case CENTER:
-			// chrome.runtime.sendMessage({"message": "open_new_tab", "url": trainer.currentPointingHref});
-			if(trainer.currentPointingHref) {
-				// window.location.href = trainer.currentPointingHref;
-				trainer.currentPointingHref.click();
-			}
-			break;
+		// 	break;
+		// case LOWER_RIGHT:
+		// 	chrome.runtime.sendMessage({"message": "close_current_tab"});
+		// 	break;
+		// case CENTER:
+		// 	// chrome.runtime.sendMessage({"message": "open_new_tab", "url": trainer.currentPointingHref});
+		// 	if(currentPointingHref) {
+		// 		// window.location.href = trainer.currentPointingHref;
+		// 		currentPointingHref.click();
+		// 	}
+		// 	break;
 	}
 }
 
